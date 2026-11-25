@@ -1,0 +1,63 @@
+name: sandbox-vm
+
+# 两层隔离：box 只在 internal 网络（没有外网路由），唯一出口是 proxy 的白名单
+services:
+  proxy:
+    build: ./proxy
+    restart: unless-stopped
+    environment:
+      ALLOW_PORTS: ${ALLOW_PORTS:-443}
+      UPSTREAM: ${UPSTREAM:-}          # 由 sb.sh 根据 .env 的 UPSTREAM_PROXY 计算
+      BOX_SUBNET: 172.30.0.0/24
+    volumes:
+      - ./allowlist.txt:/etc/tinyproxy/allowlist.txt:ro
+    networks:
+      sandbox_net:
+        ipv4_address: 172.30.0.2
+      egress: {}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  box:
+    build: ./box
+    depends_on: [proxy]
+    restart: unless-stopped
+    environment:
+      TZ: ${SANDBOX_TZ:-UTC}
+      HTTP_PROXY: http://172.30.0.2:8888
+      HTTPS_PROXY: http://172.30.0.2:8888
+      http_proxy: http://172.30.0.2:8888
+      https_proxy: http://172.30.0.2:8888
+      HOME: /sandbox
+      DISABLE_AUTOUPDATER: "1"                         # Claude Code 不自更新（根只读，靠重建升级）
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"    # 关遥测/错误上报等非必要连接
+      USE_BUILTIN_RIPGREP: "0"                         # 用系统 ripgrep
+    volumes:
+      - ./data:/sandbox:rw               # 沙箱内唯一可读写的数据
+      - ./noX11:/tmp/.X11-unix:ro        # 只读空文件夹：VS Code 建不了图形界面（X11）通道，读不到 Windows 剪贴板
+    working_dir: /sandbox
+    user: "1000:1000"
+    read_only: true                      # 根文件系统只读
+    tmpfs: ["/tmp:size=512m,exec"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 512
+    mem_limit: ${SANDBOX_MEM:-2g}         # 内存上限，改 .env 的 SANDBOX_MEM
+    cpus: ${SANDBOX_CPUS:-2.0}          # CPU 核数上限，改 .env 的 SANDBOX_CPUS
+    dns: [127.0.0.1]                     # 不给 DNS，防 DNS 外泄；只能走代理
+    networks:
+      sandbox_net:
+        ipv4_address: 172.30.0.3         # 固定 IP：否则 proxy 没起来时 box 可能抢走 172.30.0.2，proxy 就再也起不来
+
+networks:
+  sandbox_net:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  egress:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: sbx-egress   # 固定网卡名，防火墙 sandbox-fw 按它限制 proxy 只能连上游代理

@@ -1,0 +1,6 @@
+.env
+data/
+noX11/
+*.log
+ops.md
+allowlist.tmp

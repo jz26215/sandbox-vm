@@ -1,0 +1,20 @@
+# 白名单：每行一个域名，支持通配（fnmatch，区分大小写）
+# 只有这里列出的域名能从沙箱访问；IP 直连、其他域名一律拒绝
+github.com
+api.github.com
+*.githubusercontent.com
+pypi.org
+files.pythonhosted.org
+# Claude Code / Codex（2026-11-24）
+api.anthropic.com
+console.anthropic.com
+platform.claude.com
+claude.ai
+api.openai.com
+chatgpt.com
+auth.openai.com
+registry.npmjs.org
+# VS Code 服务端（2026-11-25）
+update.code.visualstudio.com
+*.vscode-cdn.net
+vscode.download.prss.microsoft.com
